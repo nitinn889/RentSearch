@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Rent Radar</title>
+  <meta name="theme-color" content="#0f766e">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="auth-wrap">
+    <section class="panel auth-card">
+      <div class="brand">
+        <img src="/static/icon.svg" alt="" width="40" height="40">
+        <div><h1>Rent Radar</h1><p class="muted">Know the moment a flat comes up</p></div>
+      </div>
+      <ul class="auth-points">
+        <li>Watches NoBroker, MagicBricks, SquareYards and pages you add</li>
+        <li>Alerts for new flats in your area or in the exact building you want</li>
+        <li>Phone push, Telegram, email and browser notifications</li>
+      </ul>
+      <form id="auth-form">
+        <h2 id="auth-title">Sign in</h2>
+        <label class="field"><span>Email</span>
+          <input id="email" type="email" autocomplete="email" required></label>
+        <label class="field"><span>Password</span>
+          <input id="password" type="password" autocomplete="current-password" minlength="8" required></label>
+        <label class="field" id="code-field" hidden><span>Invite code</span>
+          <input id="code" autocomplete="off"></label>
+        <p id="auth-error" class="auth-error" role="alert"></p>
+        <button id="auth-submit" class="btn-primary" type="submit">Sign in</button>
+      </form>
+      <p class="auth-switch"><span id="switch-text">New here?</span>
+        <button id="switch" class="link-btn" type="button">Create an account</button></p>
+    </section>
+  </main>
+  <script>
+    "use strict";
+    const $ = (s) => document.querySelector(s);
+    let signup = location.hash === "#signup";
+    let inviteNeeded = false;
+
+    function render() {
+      $("#auth-title").textContent = signup ? "Create your account" : "Sign in";
+      $("#auth-submit").textContent = signup ? "Create account" : "Sign in";
+      $("#switch-text").textContent = signup ? "Already have an account?" : "New here?";
+      $("#switch").textContent = signup ? "Sign in" : "Create an account";
+      $("#password").autocomplete = signup ? "new-password" : "current-password";
+      $("#code-field").hidden = !(signup && inviteNeeded);
+      $("#code").required = signup && inviteNeeded;
+      $("#auth-error").textContent = "";
+    }
+
+    $("#switch").addEventListener("click", () => { signup = !signup; render(); });
+    $("#auth-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("#auth-submit").disabled = true;
+      try {
+        const res = await fetch(signup ? "/api/auth/signup" : "/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: $("#email").value, password: $("#password").value, code: $("#code").value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        location.href = "/";
+      } catch (err) {
+        $("#auth-error").textContent = err.message;
+      } finally {
+        $("#auth-submit").disabled = false;
+      }
+    });
+    fetch("/api/auth/info").then((r) => r.json()).then((info) => { inviteNeeded = info.invite_code; render(); });
+    render();
+  </script>
+</body>
+</html>

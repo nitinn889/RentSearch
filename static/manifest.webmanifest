@@ -1,0 +1,14 @@
+{
+  "name": "Rent Radar",
+  "short_name": "Rent Radar",
+  "description": "Alerts you when a flat comes up for rent or sale near you, or in the building you want.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1419",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

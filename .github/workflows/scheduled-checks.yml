@@ -1,0 +1,28 @@
+name: Automatic checks timer
+
+# Free hosts (like Render's free plan) sleep when nobody visits. Every 30 minutes this wakes the app
+# and asks it to run everyone's due automatic checks. It does nothing until you add two repository
+# secrets (Settings → Secrets and variables → Actions):
+#   RENT_RADAR_URL  e.g. https://rent-radar.onrender.com
+#   CRON_SECRET     the CRON_SECRET value from your Render service's Environment tab
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      URL: ${{ secrets.RENT_RADAR_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Skip (secrets not set)
+        if: env.URL == '' || env.CRON_SECRET == ''
+        run: echo "Add RENT_RADAR_URL and CRON_SECRET repository secrets to turn this on."
+      - name: Wake the app and start due checks
+        if: env.URL != '' && env.CRON_SECRET != ''
+        run: |
+          curl -fsS --retry 3 --retry-delay 20 --max-time 120 \
+            -X POST -H "X-Cron-Secret: $CRON_SECRET" "${URL%/}/api/cron"

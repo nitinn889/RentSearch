@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rent Radar</title>
+  <meta name="description" content="Alerts you when a flat comes up for rent or sale near you, or in the building you want.">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/static/icon.svg" alt="" width="34" height="34">
+      <div>
+        <h1>Rent Radar</h1>
+        <p id="area-summary" class="muted">Loading…</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <label class="auto-refresh" title="The app re-checks every site on its own and alerts you">
+        <span>Auto-check</span>
+        <select id="schedule"></select>
+      </label>
+      <button id="refresh" class="btn-primary btn-refresh">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Refresh</span>
+      </button>
+      <div id="user-menu" class="user-menu" hidden>
+        <span id="user-email" class="muted small"></span>
+        <button id="logout" class="link-btn small" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="storage-warning" class="warning-bar" hidden>
+    This server has no database, so watches and history are lost when it restarts.
+    Add a free Postgres <code>DATABASE_URL</code> (see the README).
+  </div>
+
+  <div id="alert-banner" class="alert-banner" hidden>
+    <span class="bell">🔔</span>
+    <strong id="alert-text"></strong>
+    <button id="alert-show" class="btn-light">Show them</button>
+    <button id="alert-close" class="icon-btn" aria-label="Dismiss">✕</button>
+  </div>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="panel" id="panel-where">
+        <div class="panel-head">
+          <h2>1 · Area to watch</h2>
+          <button id="clear-area" class="link-btn small" type="button" hidden>Remove</button>
+        </div>
+        <form id="search-form" class="row">
+          <input id="search-input" type="search" placeholder="Area, landmark or address, e.g. Koramangala, Bangalore" autocomplete="off">
+          <button class="btn">Find</button>
+        </form>
+        <ul id="search-results" class="search-results" hidden></ul>
+        <div class="row small">
+          <button id="use-location" class="link-btn" type="button">📍 Use my current location</button>
+          <span class="muted">or click the map</span>
+        </div>
+        <label class="field">
+          <span>Search radius <b id="radius-value">2 km</b></span>
+          <input id="radius" type="range" min="0.5" max="20" step="0.5" value="2">
+        </label>
+      </section>
+
+      <section class="panel">
+        <h2>2 · What you want</h2>
+        <div class="segmented" id="deal" role="radiogroup">
+          <button type="button" data-value="rent" role="radio">For rent</button>
+          <button type="button" data-value="sale" role="radio">For sale</button>
+          <button type="button" data-value="both" role="radio">Both</button>
+        </div>
+        <div class="grid2">
+          <label class="field" id="max-rent-field">
+            <span>Max rent (₹/month)</span>
+            <input id="max-rent" type="number" min="0" step="1000" placeholder="Any">
+          </label>
+          <label class="field" id="max-price-field">
+            <span>Max price (₹)</span>
+            <input id="max-price" type="number" min="0" step="100000" placeholder="Any">
+            <small id="max-price-hint" class="muted"></small>
+          </label>
+          <label class="field">
+            <span>Bedrooms</span>
+            <select id="min-bedrooms">
+              <option value="">Any</option>
+              <option value="1">1 BHK or more</option>
+              <option value="2">2 BHK or more</option>
+              <option value="3">3 BHK or more</option>
+              <option value="4">4 BHK or more</option>
+            </select>
+          </label>
+        </div>
+        <p class="muted tiny">Budget and bedrooms apply to the area. Building watches alert you about any flat.</p>
+      </section>
+
+      <section class="panel" id="panel-buildings">
+        <h2>3 · Buildings to watch</h2>
+        <p class="muted small">Get alerted the moment any flat in a particular apartment building or society is listed, even outside your area.</p>
+        <ul id="building-list" class="building-list"></ul>
+        <form id="building-form" class="building-form">
+          <input id="b-name" placeholder="Building or society, e.g. Prestige Lakeside Habitat" autocomplete="off" required>
+          <div class="row">
+            <input id="b-where" placeholder="Area or city (helps find it)" autocomplete="off">
+            <select id="b-deal" aria-label="Rent or sale">
+              <option value="rent">Rent</option>
+              <option value="sale">Sale</option>
+              <option value="both">Both</option>
+            </select>
+          </div>
+          <button class="btn" type="submit">Find building</button>
+        </form>
+        <ul id="b-results" class="search-results" hidden></ul>
+        <p id="b-pick-hint" class="note small" hidden>Click the building's location on the map. <button id="b-pick-cancel" class="link-btn" type="button">Cancel</button></p>
+      </section>
+
+      <details class="panel" id="panel-sites">
+        <summary><h2>4 · Sites to scan</h2></summary>
+        <div id="source-toggles" class="checks"></div>
+        <h3>Your own pages</h3>
+        <p class="muted small">Paste any results page (a saved search on another site, a society notice board…). New links on it count as new listings.</p>
+        <div id="custom-pages"></div>
+        <button id="add-page" class="link-btn" type="button">+ Add a page</button>
+      </details>
+
+      <details class="panel" id="panel-alerts">
+        <summary><h2>5 · How to alert you</h2></summary>
+        <p id="schedule-note" class="note small"></p>
+        <div class="checks">
+          <label><input type="checkbox" id="al-sound"> Play a sound in this page</label>
+          <label><input type="checkbox" id="al-browser"> Browser notification</label>
+          <label id="al-windows-row"><input type="checkbox" id="al-windows"> Windows notification (even when the browser is minimised)</label>
+        </div>
+        <div class="row small">
+          <button class="link-btn" type="button" data-test-local>Test sound + browser notification</button>
+          <button class="link-btn" type="button" data-test="windows" id="test-windows">Test Windows notification</button>
+        </div>
+
+        <h3>📱 Phone push (free, via ntfy)</h3>
+        <p class="muted small">Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy app</a> on your phone, tap <b>+</b> and subscribe to the topic below. Works even when this page is closed.</p>
+        <div class="row">
+          <input id="al-ntfy-topic" placeholder="Topic name, e.g. rent-radar-7xq2…">
+          <button id="gen-topic" class="btn" type="button">Generate</button>
+        </div>
+        <button class="link-btn small" type="button" data-test="phone">Send a test push</button>
+
+        <h3>✈️ Telegram</h3>
+        <p class="muted small">Create a bot with <b>@BotFather</b> and paste its token. Send your bot any message, then get your chat ID from <b>@userinfobot</b>.</p>
+        <div class="grid2">
+          <input id="al-tg-token" type="password" placeholder="Bot token" autocomplete="off">
+          <input id="al-tg-chat" placeholder="Chat ID">
+        </div>
+        <button class="link-btn small" type="button" data-test="telegram">Send a test message</button>
+
+        <h3>✉️ Email</h3>
+        <p class="muted small">Gmail: server smtp.gmail.com, port 465, your address and an <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App Password</a>.</p>
+        <div class="grid2">
+          <input id="al-email-to" type="email" placeholder="Send alerts to">
+          <input id="al-smtp-user" type="email" placeholder="Sender address (login)">
+          <input id="al-smtp-pass" type="password" placeholder="Password / App Password" autocomplete="off">
+          <div class="row">
+            <input id="al-smtp-host" placeholder="SMTP server">
+            <input id="al-smtp-port" type="number" class="port" placeholder="Port">
+          </div>
+        </div>
+        <button class="link-btn small" type="button" data-test="email">Send a test email</button>
+        <p class="muted tiny">Saved passwords are never shown again; type a new one to replace it.</p>
+      </details>
+
+      <details class="panel" id="panel-history">
+        <summary><h2>Recent alerts <span id="history-count" class="count">0</span></h2></summary>
+        <ul id="alert-log" class="alert-log"></ul>
+      </details>
+      <p id="save-state" class="muted tiny save-state"></p>
+    </aside>
+
+    <section class="content">
+      <div id="map" class="map"></div>
+
+      <section id="progress" class="panel progress" hidden>
+        <div class="progress-head">
+          <span class="spinner"></span>
+          <strong id="progress-stage">Starting…</strong>
+        </div>
+        <ul id="progress-sources" class="source-list"></ul>
+      </section>
+
+      <section class="results">
+        <div class="results-head">
+          <div class="tabs" role="tablist">
+            <button id="tab-new" role="tab" data-view="new">New <span class="count" id="count-new">0</span></button>
+            <button id="tab-all" role="tab" data-view="all">All <span class="count" id="count-all">0</span></button>
+          </div>
+          <div class="row">
+            <select id="sort" aria-label="Sort by">
+              <option value="posted">Newest first</option>
+              <option value="distance">Nearest first</option>
+              <option value="price">Cheapest first</option>
+            </select>
+            <button id="mark-read" class="btn" type="button">Mark all as seen</button>
+          </div>
+        </div>
+        <div id="watch-filter" class="chips"></div>
+        <p id="results-summary" class="muted small"></p>
+        <div id="source-chips" class="chips"></div>
+        <div id="baseline-note" class="note" hidden></div>
+        <div id="cards" class="cards"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer muted tiny">
+    Rent Radar reads public listing pages and follows each site's robots.txt. Listings belong to the sites that publish them.
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

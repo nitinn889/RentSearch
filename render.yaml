@@ -1,0 +1,24 @@
+# Render Blueprint: https://render.com/deploy?repo=https://github.com/nitinn889/RentSearch
+services:
+  - type: web
+    name: rent-radar
+    runtime: python
+    plan: free
+    region: singapore            # closest Render region to the Indian property sites
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: RENT_RADAR_MODE
+        value: server
+      - key: SECRET_KEY            # signs sign-in cookies
+        generateValue: true
+      - key: CRON_SECRET           # lets the GitHub Actions timer wake the app for automatic checks
+        generateValue: true
+      - key: DATABASE_URL          # paste your free Neon Postgres connection string
+        sync: false
+      - key: SIGNUP_CODE           # optional: an invite code people need to create an account
+        sync: false
