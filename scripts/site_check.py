@@ -40,6 +40,10 @@ def main() -> int:
             rows.append((source.name, deal, result, f"{time.time() - t:.1f}s"))
     table = "| Site | Deal | Result | Time |\n|---|---|---|---|\n" + "\n".join(f"| {' | '.join(r)} |" for r in rows)
     print(table)
+    if os.environ.get("GITHUB_ACTIONS"):  # annotations show on the run page even to visitors who aren't signed in
+        for name, deal, result, _ in rows:
+            level = "notice" if result.startswith("ok") else "warning"
+            print(f"::{level} title={name} {deal}::{result}")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(f"### Site check from this runner\n\nLocalities: {', '.join(localities)}\n\n{table}\n")
